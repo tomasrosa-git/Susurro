@@ -21,6 +21,7 @@ final class DictationController {
     var onStateChange: (State) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
     var onNotice: (String) -> Void = { _ in }
+    var onDictation: (String) -> Void = { _ in }
 
     private(set) var state: State = .idle {
         didSet { if state != oldValue { onStateChange(state) } }
@@ -151,7 +152,7 @@ final class DictationController {
             defer { try? FileManager.default.removeItem(at: wav) }
             do {
                 try Audio.wav(samples: samples).write(to: wav)
-                var text = try await pipeline.transcriber.transcribe(wav: wav)
+                var text = try await pipeline.transcript(wav: wav)
                 if let cleaner = pipeline.cleaner, !text.isEmpty {
                     do {
                         text = try await cleaner.clean(text)
@@ -167,6 +168,7 @@ final class DictationController {
                         Spacing.join(text, after: CursorContext.previousCharacter()),
                         restoringClipboard: restoreClipboard
                     )
+                    onDictation(text)
                 }
             } catch {
                 // Cancelled network calls surface as URLError, not CancellationError.

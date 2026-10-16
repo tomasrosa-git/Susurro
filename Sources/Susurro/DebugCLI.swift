@@ -6,7 +6,7 @@ import SusurroCore
 enum DebugCLI {
     static func transcribe(path: String) async -> Int32 {
         await run { pipeline in
-            let raw = try await timed("transcripción") { try await pipeline.transcriber.transcribe(wav: URL(fileURLWithPath: path)) }
+            let raw = try await timed("transcripción") { try await pipeline.transcript(wav: URL(fileURLWithPath: path)) }
             print(raw)
             if let cleaner = pipeline.cleaner, !raw.isEmpty {
                 print(try await timed("limpieza") { try await cleaner.clean(raw) })
@@ -23,7 +23,9 @@ enum DebugCLI {
 
     private static func run(_ body: (DictationPipeline) async throws -> Void) async -> Int32 {
         do {
-            let pipeline = DictationPipeline(config: try ConfigStore.load(), secrets: ConfigStore.secrets())
+            let pipeline = DictationPipeline(
+                config: try ConfigStore.load(), secrets: ConfigStore.secrets(), vocabulary: ConfigStore.vocabulary()
+            )
             log(pipeline.summary)
             pipeline.warnings.forEach(log)
             try await body(pipeline)
