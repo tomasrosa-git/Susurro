@@ -7,6 +7,7 @@ final class HotkeyMonitor {
     var onPress: () -> Void = {}
     var onRelease: () -> Void = {}
     var onOtherKey: () -> Void = {}
+    var onEscape: () -> Void = {}
 
     private(set) var hotkey: Hotkey
     private var tap: CFMachPort?
@@ -14,6 +15,7 @@ final class HotkeyMonitor {
     private var comboDown = false
 
     private static let fnKeyCode: Int64 = 63
+    private static let escapeKeyCode: Int64 = 53
 
     init(hotkey: Hotkey) {
         self.hotkey = hotkey
@@ -63,6 +65,11 @@ final class HotkeyMonitor {
             return false
 
         case .keyDown:
+            if keyCode == Self.escapeKeyCode {
+                // Observed, never swallowed: Esc still has to reach the app being typed in.
+                onEscape()
+                return false
+            }
             switch hotkey {
             case .fn:
                 if fnDown { onOtherKey() }

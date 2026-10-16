@@ -12,6 +12,7 @@ final class AudioRecorder: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let lock = NSLock()
     private var samples: [Float] = []
+    private var currentLevel: Float = 0
     private let outputFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
         sampleRate: Double(Audio.sampleRate),
@@ -20,7 +21,10 @@ final class AudioRecorder: @unchecked Sendable {
     )!
 
     func start() throws {
-        lock.withLock { samples.removeAll(keepingCapacity: true) }
+        lock.withLock {
+            samples.removeAll(keepingCapacity: true)
+            currentLevel = 0
+        }
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0,
@@ -45,7 +49,11 @@ final class AudioRecorder: @unchecked Sendable {
             }
             guard error == nil, let channel = converted.floatChannelData?[0] else { return }
             let chunk = UnsafeBufferPointer(start: channel, count: Int(converted.frameLength))
-            self.lock.withLock { self.samples.append(contentsOf: chunk) }
+            let rms = chunk.isEmpty ? 0 : (chunk.reduce(0) { $0 + $1 * $1 } / Float(chunk.count)).squareRoot()
+            self.lock.withLock {
+                self.samples.append(contentsOf: chunk)
+                self.currentLevel = rms
+            }
         }
         engine.prepare()
         do {
@@ -55,6 +63,9 @@ final class AudioRecorder: @unchecked Sendable {
             throw error
         }
     }
+
+    /// RMS of the latest buffer, for the recording indicator.
+    var level: Float { lock.withLock { currentLevel } }
 
     func stop() -> [Float] {
         engine.inputNode.removeTap(onBus: 0)

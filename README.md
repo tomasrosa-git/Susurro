@@ -91,10 +91,19 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
 ## Uso
 
 - **Mantené el atajo** mientras hablás y **soltalo** para transcribir y pegar.
-- Un toque corto (menos de 0,3 s) se ignora.
+- **Doble toque** para manos libres: graba sin mantener nada. Un toque más lo termina y pega. A los
+  5 minutos se corta solo y transcribe lo grabado, para que una sesión olvidada no grabe toda la
+  tarde.
+- **Esc** cancela: descarta la grabación en curso o corta una transcripción que ya arrancó. Susurro
+  solo lo observa, así que Esc le sigue llegando a la app donde estás escribiendo.
+- Un toque suelto (menos de 0,3 s, sin segundo toque) se descarta.
 - Con `fn`, si apretás otra tecla mientras la mantenés (por ejemplo `fn`+flecha), la grabación se
   descarta: la estabas usando como modificador.
-- El ícono de la barra de menú indica el estado: 🎙 listo, rojo grabando, onda transcribiendo.
+- Mientras graba o transcribe aparece una pill flotante abajo en la pantalla: "Escuchando" al
+  mantener, "Manos libres" con el tiempo transcurrido (en naranja en los últimos 30 s) y
+  "Transcribiendo". Las barras rojas siguen el nivel del micrófono.
+- El ícono de la barra de menú también indica el estado: 🎙 listo, rojo grabando, onda
+  transcribiendo.
 - El texto queda en el portapapeles después de pegarse, así que lo podés volver a pegar con ⌘V.
 
 ### Diagnóstico
