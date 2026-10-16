@@ -13,7 +13,7 @@ import Testing
     @Test func roundTrips() throws {
         let config = Config(
             hotkey: "f13", language: "es", transcriber: .groq, whisperModel: "medium",
-            whisperCLI: "/x/whisper-cli", cleanup: false, cleanupModel: "m"
+            whisperCLI: "/x/whisper-cli", cleanup: false, cleanupModel: "m", restoreClipboard: true
         )
         #expect(try Config.decode(config.encoded()) == config)
     }
@@ -23,6 +23,7 @@ import Testing
         #expect(config.transcriber == .local)
         #expect(config.cleanup)
         #expect(config.cleanupModel == Config.defaults.cleanupModel)
+        #expect(!config.restoreClipboard)
     }
 
     @Test func unknownTranscriberIsAnError() {

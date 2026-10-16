@@ -5,9 +5,10 @@ cd "$(dirname "$0")/.."
 swift build -c release
 app=build/Susurro.app
 rm -rf $app
-mkdir -p $app/Contents/MacOS
+mkdir -p $app/Contents/MacOS $app/Contents/Resources
 cp .build/release/Susurro $app/Contents/MacOS/
 cp Resources/Info.plist $app/Contents/
+cp Resources/AppIcon.icns $app/Contents/Resources/
 
 # macOS ties Accessibility/Microphone grants to the code signature. Ad-hoc signatures change on every
 # build, so grants reset; a stable self-signed identity (see README) keeps them across rebuilds.

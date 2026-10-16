@@ -14,6 +14,7 @@ public struct Config: Codable, Equatable, Sendable {
     public var whisperCLI: String
     public var cleanup: Bool
     public var cleanupModel: String
+    public var restoreClipboard: Bool
 
     public static let defaults = Config()
 
@@ -24,7 +25,8 @@ public struct Config: Codable, Equatable, Sendable {
         whisperModel: String = "small",
         whisperCLI: String = "/opt/homebrew/bin/whisper-cli",
         cleanup: Bool = true,
-        cleanupModel: String = "qwen/qwen3.8-27b"
+        cleanupModel: String = "qwen/qwen3.8-27b",
+        restoreClipboard: Bool = false
     ) {
         self.hotkey = hotkey
         self.language = language
@@ -33,6 +35,7 @@ public struct Config: Codable, Equatable, Sendable {
         self.whisperCLI = whisperCLI
         self.cleanup = cleanup
         self.cleanupModel = cleanupModel
+        self.restoreClipboard = restoreClipboard
     }
 
     public init(from decoder: Decoder) throws {
@@ -45,6 +48,7 @@ public struct Config: Codable, Equatable, Sendable {
         whisperCLI = try c.decodeIfPresent(String.self, forKey: .whisperCLI) ?? d.whisperCLI
         cleanup = try c.decodeIfPresent(Bool.self, forKey: .cleanup) ?? d.cleanup
         cleanupModel = try c.decodeIfPresent(String.self, forKey: .cleanupModel) ?? d.cleanupModel
+        restoreClipboard = try c.decodeIfPresent(Bool.self, forKey: .restoreClipboard) ?? d.restoreClipboard
     }
 
     public static func decode(_ data: Data) throws -> Config {
