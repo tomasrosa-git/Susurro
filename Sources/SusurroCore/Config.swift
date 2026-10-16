@@ -8,6 +8,7 @@ public struct Config: Codable, Equatable, Sendable {
     }
 
     public var hotkey: String
+    public var commandHotkey: String
     public var language: String
     public var transcriber: Transcriber
     public var whisperModel: String
@@ -20,6 +21,7 @@ public struct Config: Codable, Equatable, Sendable {
 
     public init(
         hotkey: String = "fn",
+        commandHotkey: String = "fn+ctrl",
         language: String = "auto",
         transcriber: Transcriber = .local,
         whisperModel: String = "small",
@@ -29,6 +31,7 @@ public struct Config: Codable, Equatable, Sendable {
         restoreClipboard: Bool = false
     ) {
         self.hotkey = hotkey
+        self.commandHotkey = commandHotkey
         self.language = language
         self.transcriber = transcriber
         self.whisperModel = whisperModel
@@ -42,6 +45,7 @@ public struct Config: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config.defaults
         hotkey = try c.decodeIfPresent(String.self, forKey: .hotkey) ?? d.hotkey
+        commandHotkey = try c.decodeIfPresent(String.self, forKey: .commandHotkey) ?? d.commandHotkey
         language = try c.decodeIfPresent(String.self, forKey: .language) ?? d.language
         transcriber = try c.decodeIfPresent(Transcriber.self, forKey: .transcriber) ?? d.transcriber
         whisperModel = try c.decodeIfPresent(String.self, forKey: .whisperModel) ?? d.whisperModel

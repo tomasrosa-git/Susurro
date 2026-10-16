@@ -1,4 +1,5 @@
 import AppKit
+import SusurroCore
 import SwiftUI
 
 /// Floating indicator near the bottom of the screen while Susurro records or transcribes.
@@ -80,18 +81,17 @@ private struct PillView: View {
     var body: some View {
         HStack(spacing: 8) {
             switch model.state {
-            case .recording(.hold):
-                LevelBars(level: model.level)
-                Text("Escuchando")
-            case .recording(.handsFree):
-                LevelBars(level: model.level)
-                Text("Manos libres")
-                Text(clock(model.elapsed))
-                    .foregroundStyle(remaining < 30 ? Color.orange : Color.white.opacity(0.6))
-                    .monospacedDigit()
-            case .transcribing:
+            case .recording(let mode, let trigger):
+                LevelBars(level: model.level, color: trigger == .command ? .purple : .red)
+                Text(trigger == .command ? "Comando" : mode == .hold ? "Escuchando" : "Manos libres")
+                if mode == .handsFree {
+                    Text(clock(model.elapsed))
+                        .foregroundStyle(remaining < 30 ? Color.orange : Color.white.opacity(0.6))
+                        .monospacedDigit()
+                }
+            case .transcribing(let trigger):
                 WorkingBars()
-                Text("Transcribiendo")
+                Text(trigger == .command ? "Aplicando" : "Transcribiendo")
             case .idle:
                 EmptyView()
             }
@@ -120,12 +120,13 @@ private let barShape: [CGFloat] = [0.45, 0.75, 1, 0.75, 0.45]
 
 private struct LevelBars: View {
     let level: Float
+    let color: Color
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(barShape.indices, id: \.self) { index in
                 Capsule()
-                    .fill(Color.red)
+                    .fill(color)
                     .frame(width: 3, height: max(3, 14 * barShape[index] * loudness))
             }
         }

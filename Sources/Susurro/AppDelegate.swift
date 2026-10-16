@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let stateItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let hotkeyItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let commandItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pipelineItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let messageItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let enabledItem = NSMenuItem(title: "Activado", action: #selector(toggleEnabled), keyEquivalent: "")
@@ -18,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private var config = Config.defaults
-    private var monitor = HotkeyMonitor(hotkey: .fn)
+    private var monitor = HotkeyMonitor(bindings: HotkeyBindings(dictation: .fn([]), command: .fn([.control])))
     private var controller = DictationController(
         pipeline: DictationPipeline(config: .defaults, secrets: [:], vocabulary: .empty)
     )
@@ -40,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
-        monitor.onPress = { [unowned self] in if enabled { controller.hotkeyPressed() } }
+        monitor.onPress = { [unowned self] in if enabled { controller.hotkeyPressed($0) } }
+        monitor.onUpgradeToCommand = { [unowned self] in controller.upgradeToCommand() }
         monitor.onRelease = { [unowned self] in controller.hotkeyReleased() }
         monitor.onOtherKey = { [unowned self] in controller.otherKeyPressed() }
         monitor.onEscape = { [unowned self] in controller.escapePressed() }
@@ -63,12 +65,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         stateItem.isEnabled = false
         hotkeyItem.isEnabled = false
+        commandItem.isEnabled = false
         pipelineItem.isEnabled = false
         messageItem.isEnabled = false
         messageItem.isHidden = true
         accessibilityItem.target = self
         accessibilityItem.isHidden = true
-        for item in [stateItem, hotkeyItem, pipelineItem, messageItem, accessibilityItem] { menu.addItem(item) }
+        for item in [stateItem, hotkeyItem, commandItem, pipelineItem, messageItem, accessibilityItem] { menu.addItem(item) }
         menu.addItem(.separator())
         enabledItem.target = self
         menu.addItem(enabledItem)
@@ -94,14 +97,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render(_ state: DictationController.State) {
         let title: String = switch state {
         case .idle: enabled ? "Listo" : "Desactivado"
-        case .recording(.hold): "Grabando…"
-        case .recording(.handsFree): "Grabando (manos libres)…"
-        case .transcribing: "Transcribiendo…"
+        case .recording(.hold, .dictation): "Grabando…"
+        case .recording(.handsFree, .dictation): "Grabando (manos libres)…"
+        case .recording(_, .command): "Escuchando comando…"
+        case .transcribing(.dictation): "Transcribiendo…"
+        case .transcribing(.command): "Aplicando comando…"
         }
         if let button = statusItem.button {
             button.image = MenuBarIcon.wave
             button.contentTintColor = if case .recording = state { .systemRed } else { nil }
-            button.alphaValue = state == .transcribing ? 0.55 : 1
+            button.alphaValue = if case .transcribing = state { 0.55 } else { 1 }
             button.appearsDisabled = !enabled
             button.toolTip = "Susurro — \(title)"
         }
@@ -128,14 +133,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.restoreClipboard = config.restoreClipboard
         pipelineItem.title = pipeline.summary
         if let warning = pipeline.warnings.first { showMessage(warning, beep: false) }
+        var dictationSpec = config.hotkey
+        let dictation: Hotkey
         do {
-            monitor.setHotkey(try Hotkey.parse(config.hotkey))
-            hotkeyItem.title = "Mantené \(config.hotkey) para dictar · doble toque: manos libres"
+            dictation = try Hotkey.parse(config.hotkey)
         } catch {
-            monitor.setHotkey(.fn)
-            hotkeyItem.title = "Mantené fn para dictar · doble toque: manos libres"
+            dictation = .fn([])
+            dictationSpec = "fn"
             showMessage("Atajo inválido \"\(config.hotkey)\", uso fn.")
         }
+        let command = try? Hotkey.parse(config.commandHotkey)
+        let bindings = HotkeyBindings(dictation: dictation, command: command)
+        monitor.setBindings(bindings)
+        if bindings.command == nil {
+            showMessage("Atajo de comando inválido o igual al de dictado: \"\(config.commandHotkey)\".")
+        }
+        hotkeyItem.title = "Mantené \(dictationSpec) para dictar · doble toque: manos libres"
+        commandItem.title = bindings.command == nil
+            ? "Modo comando desactivado"
+            : "\(config.commandHotkey): comando sobre la selección"
     }
 
     private func waitForAccessibility() {

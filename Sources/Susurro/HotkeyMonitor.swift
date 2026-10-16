@@ -4,27 +4,32 @@ import SusurroCore
 /// Session-level event tap. Needs Accessibility; without it `start()` returns false.
 @MainActor
 final class HotkeyMonitor {
-    var onPress: () -> Void = {}
+    var onPress: (Trigger) -> Void = { _ in }
     var onRelease: () -> Void = {}
+    /// fn held for dictation, then the command modifiers joined it.
+    var onUpgradeToCommand: () -> Void = {}
     var onOtherKey: () -> Void = {}
     var onEscape: () -> Void = {}
 
-    private(set) var hotkey: Hotkey
+    private(set) var bindings: HotkeyBindings
     private var tap: CFMachPort?
+    /// Trigger of the fn press in progress; nil while fn is up or when it matched neither hotkey.
+    private var fnPress: Trigger?
     private var fnDown = false
-    private var comboDown = false
+    private var comboKeyDown: Int64?
 
     private static let fnKeyCode: Int64 = 63
     private static let escapeKeyCode: Int64 = 53
 
-    init(hotkey: Hotkey) {
-        self.hotkey = hotkey
+    init(bindings: HotkeyBindings) {
+        self.bindings = bindings
     }
 
-    func setHotkey(_ hotkey: Hotkey) {
-        self.hotkey = hotkey
+    func setBindings(_ bindings: HotkeyBindings) {
+        self.bindings = bindings
         fnDown = false
-        comboDown = false
+        fnPress = nil
+        comboKeyDown = nil
     }
 
     var isRunning: Bool { tap != nil }
@@ -57,11 +62,23 @@ final class HotkeyMonitor {
             return false
 
         case .flagsChanged:
-            guard hotkey == .fn, keyCode == Self.fnKeyCode else { return false }
-            let down = event.flags.contains(.maskSecondaryFn)
-            guard down != fnDown else { return false }
-            fnDown = down
-            down ? onPress() : onRelease()
+            guard bindings.usesFn else { return false }
+            let modifiers = Self.modifiers(of: event.flags)
+            if keyCode == Self.fnKeyCode {
+                let down = event.flags.contains(.maskSecondaryFn)
+                guard down != fnDown else { return false }
+                fnDown = down
+                if down {
+                    fnPress = bindings.fnTrigger(modifiers: modifiers)
+                    if let fnPress { onPress(fnPress) }
+                } else if fnPress != nil {
+                    fnPress = nil
+                    onRelease()
+                }
+            } else if fnPress == .dictation, bindings.fnTrigger(modifiers: modifiers) == .command {
+                fnPress = .command
+                onUpgradeToCommand()
+            }
             return false
 
         case .keyDown:
@@ -70,22 +87,18 @@ final class HotkeyMonitor {
                 onEscape()
                 return false
             }
-            switch hotkey {
-            case .fn:
-                if fnDown { onOtherKey() }
-                return false
-            case .combo(let key, let modifiers):
-                guard keyCode == Int64(key) else { return false }
-                if comboDown { return true }
-                guard Self.modifiers(of: event.flags) == modifiers else { return false }
-                comboDown = true
-                onPress()
-                return true
-            }
+            if fnPress != nil { onOtherKey() }
+            if comboKeyDown == keyCode { return true }
+            guard comboKeyDown == nil,
+                  let trigger = bindings.comboTrigger(keyCode: UInt16(keyCode), modifiers: Self.modifiers(of: event.flags))
+            else { return false }
+            comboKeyDown = keyCode
+            onPress(trigger)
+            return true
 
         case .keyUp:
-            guard case .combo(let key, _) = hotkey, comboDown, keyCode == Int64(key) else { return false }
-            comboDown = false
+            guard comboKeyDown == keyCode else { return false }
+            comboKeyDown = nil
             onRelease()
             return true
 

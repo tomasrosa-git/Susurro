@@ -6,6 +6,7 @@ struct DictationPipeline: Sendable {
     let transcriber: any Transcriber
     let vocabulary: Vocabulary
     let cleaner: TextCleaner?
+    let commander: TextCommander?
     let summary: String
     let warnings: [String]
 
@@ -31,6 +32,10 @@ struct DictationPipeline: Sendable {
             }
             transcriber = LocalTranscriber(config: config, prompt: vocabulary.whisperPrompt)
             transcriberName = "whisper local (\(config.whisperModel))"
+        }
+
+        commander = key("GROQ_API_KEY").map {
+            TextCommander(apiKey: $0, model: config.cleanupModel, terms: vocabulary.terms)
         }
 
         if config.cleanup, let groqKey = key("GROQ_API_KEY") {
