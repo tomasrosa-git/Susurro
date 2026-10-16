@@ -5,6 +5,7 @@ enum Paths {
     static let configDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/susurro")
     static let configFile = configDir.appendingPathComponent("config.json")
     static let envFile = configDir.appendingPathComponent(".env")
+    static let vocabularyFile = configDir.appendingPathComponent("diccionario.txt")
     static let modelsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Susurro/models")
 }
@@ -29,6 +30,17 @@ enum ConfigStore {
 
     private static func keys(of json: Data) throws -> Set<String> {
         Set((try JSONSerialization.jsonObject(with: json) as? [String: Any])?.keys ?? [:].keys)
+    }
+
+    static func vocabulary() -> Vocabulary {
+        guard let text = try? String(contentsOf: Paths.vocabularyFile, encoding: .utf8) else { return .empty }
+        return Vocabulary.parse(text)
+    }
+
+    static func ensureVocabularyFile() throws {
+        guard !FileManager.default.fileExists(atPath: Paths.vocabularyFile.path) else { return }
+        try FileManager.default.createDirectory(at: Paths.configDir, withIntermediateDirectories: true)
+        try Data(Vocabulary.template.utf8).write(to: Paths.vocabularyFile)
     }
 
     static func secrets() -> [String: String] {

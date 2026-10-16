@@ -5,6 +5,7 @@ import SusurroCore
 struct TextCleaner: Sendable {
     let apiKey: String
     let model: String
+    let terms: [String]
 
     /// Cleanup must not hold up the paste for long; past this the raw transcript is good enough.
     private static let timeout: TimeInterval = 8
@@ -43,7 +44,7 @@ struct TextCleaner: Sendable {
         let body = try JSONEncoder().encode(Request(
             model: model,
             messages: [
-                Message(role: "system", content: Cleanup.systemPrompt),
+                Message(role: "system", content: Cleanup.systemPrompt(terms: terms)),
                 Message(role: "user", content: Cleanup.userMessage(for: raw)),
             ],
             temperature: 0,

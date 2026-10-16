@@ -13,22 +13,25 @@ struct CloudTranscriber: Transcriber {
     let apiKey: String
     let model: String
     let language: String
+    let prompt: String?
 
-    static func groq(apiKey: String, language: String) -> CloudTranscriber {
+    static func groq(apiKey: String, language: String, prompt: String?) -> CloudTranscriber {
         CloudTranscriber(
             endpoint: URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!,
             apiKey: apiKey,
             model: "whisper-large-v3-turbo",
-            language: language
+            language: language,
+            prompt: prompt
         )
     }
 
-    static func openAI(apiKey: String, language: String) -> CloudTranscriber {
+    static func openAI(apiKey: String, language: String, prompt: String?) -> CloudTranscriber {
         CloudTranscriber(
             endpoint: URL(string: "https://api.openai.com/v1/audio/transcriptions")!,
             apiKey: apiKey,
             model: "whisper-1",
-            language: language
+            language: language,
+            prompt: prompt
         )
     }
 
@@ -42,6 +45,7 @@ struct CloudTranscriber: Transcriber {
         field("response_format", "json")
         field("temperature", "0")
         if language != "auto" { field("language", language) }
+        if let prompt { field("prompt", prompt) }
         body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n".utf8))
         body.append(try Data(contentsOf: wav))
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))

@@ -19,11 +19,13 @@ struct LocalTranscriber: Sendable {
     let cli: URL
     let model: URL
     let language: String
+    let prompt: String?
 
-    init(config: Config) {
+    init(config: Config, prompt: String?) {
         cli = URL(fileURLWithPath: (config.whisperCLI as NSString).expandingTildeInPath)
         model = config.resolvedModelPath(modelsDir: Paths.modelsDir)
         language = config.language
+        self.prompt = prompt
     }
 
     func transcribe(wav: URL) async throws -> String {
@@ -45,7 +47,7 @@ struct LocalTranscriber: Sendable {
         process.arguments = [
             "-m", model.path, "-f", wav.path, "-l", language,
             "-nt", "-np", "-otxt", "-of", base.path,
-        ]
+        ] + (prompt.map { ["--prompt", $0] } ?? [])
         process.standardOutput = FileHandle.nullDevice
         // A file instead of a pipe: whisper logs enough to stderr to fill a pipe buffer and block.
         process.standardError = try FileHandle(forWritingTo: logFile)

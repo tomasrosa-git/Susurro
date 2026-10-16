@@ -67,7 +67,12 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
 1. Abrí **Acceso a Llaveros → Asistente para certificados → Crear un certificado**.
 2. Nombre `Susurro Dev`, tipo de identidad **Raíz autofirmada**, tipo de certificado **Firma de
    código**.
-3. Compilá con `SUSURRO_SIGN_IDENTITY="Susurro Dev" scripts/build-app.sh`.
+3. Listo: `build-app.sh` e `install.sh` la usan solos cuando existe. Para firmar con otra identidad,
+   pasala en `SUSURRO_SIGN_IDENTITY`.
+
+La primera vez que firma con el certificado nuevo, macOS puede pedir la contraseña del llavero:
+elegí **Permitir siempre**. Después de esa instalación hay que volver a dar Accesibilidad una última
+vez; de ahí en adelante se mantiene.
 
 ## Configuración
 
@@ -113,6 +118,30 @@ Si actualizás Susurro y aparecen opciones nuevas, se agregan solas al archivo c
   y marca el dictado como transitorio para que los gestores de portapapeles no lo guarden. Si en
   ese medio segundo copiás otra cosa, no la pisa.
 
+### Diccionario personal
+
+"Editar diccionario…" en el menú abre `~/.config/susurro/diccionario.txt` (se crea con instrucciones
+la primera vez). Después de guardarlo, usá "Recargar configuración".
+
+```
+# Una línea por término que querés escrito así:
+Queleo
+Supabase
+
+# Lo que se transcribe mal siempre igual -> cómo va:
+que leo -> Queleo
+```
+
+- **Términos**: se le pasan como pista a Whisper (local o en la nube) y a la limpieza, que los
+  escribe así cuando suenan parecido. Sirve para nombres propios, marcas y palabras técnicas.
+- **Reemplazos** (`oído -> escrito`): se aplican sobre la transcripción antes de la limpieza. No
+  distinguen mayúsculas ni tildes y solo reemplazan palabras completas: `que leo` no toca
+  "porque leo". El lado derecho también cuenta como término.
+
+La pista empuja a Whisper hacia esas palabras, así que una palabra parecida que no esté en la lista
+puede salir peor (por ejemplo "Render" como "rendering" con "Queleo" en la lista). Si pasa, agregala
+también.
+
 ### Keys de API
 
 Van en `~/.config/susurro/.env`, que no sale de tu máquina salvo hacia el proveedor correspondiente:
@@ -147,6 +176,9 @@ activado, el texto transcripto (no el audio) se manda a Groq.
   texto, para que dos dictados seguidos no queden pegados. Para saberlo lee el carácter anterior con
   Accesibilidad; en apps que no lo exponen (muchas apps Electron y web) no agrega nada.
 - El texto queda en el portapapeles después de pegarse, así que lo podés volver a pegar con ⌘V.
+- **Historial** en el menú: los últimos 10 dictados, del más nuevo al más viejo. Un clic copia el
+  texto completo al portapapeles, por ejemplo si se pegó en la ventana equivocada. Vive solo en
+  memoria: se borra al cerrar Susurro y nunca se escribe a disco. "Borrar historial" lo vacía antes.
 
 ### Diagnóstico
 
