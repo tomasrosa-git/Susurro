@@ -2,8 +2,8 @@
 
 Dictado por voz para todo macOS. Mantené apretada una tecla, hablá, soltá: el texto aparece donde
 esté el cursor, en cualquier app. Corre en la barra de menú, transcribe localmente con
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) y funciona sin conexión. Sin cuentas ni
-telemetría.
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) y funciona sin conexión. Opcionalmente pasa
+el texto por un LLM que saca muletillas y arregla la puntuación. Sin cuentas ni telemetría.
 
 ## Requisitos
 
@@ -71,12 +71,17 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
 
 ```json
 {
+  "cleanup" : true,
+  "cleanupModel" : "qwen/qwen3.8-27b",
   "hotkey" : "fn",
   "language" : "auto",
+  "transcriber" : "local",
   "whisperCLI" : "/opt/homebrew/bin/whisper-cli",
   "whisperModel" : "small"
 }
 ```
+
+Si actualizás Susurro y aparecen opciones nuevas, se agregan solas al archivo con su valor por defecto.
 
 - **`hotkey`**: `fn`, o una combinación como `ctrl+option+space`, `cmd+shift+d` o `f13`. Modificadores:
   `ctrl`, `option`/`alt`, `shift`, `cmd`. Teclas: letras, números, `space`, `return`, `tab`,
@@ -84,9 +89,31 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
   combinación queda reservada para Susurro: no le llega a la app activa.
 - **`language`**: `auto` para detectar el idioma, o un código como `es` o `en`. Fijarlo mejora la
   precisión en frases cortas.
+- **`transcriber`**: `local` (whisper.cpp, sin conexión), `groq` (`whisper-large-v3-turbo`) u `openai`
+  (`whisper-1`). Las opciones en la nube necesitan su key en `.env`; si falta, Susurro avisa en el menú
+  y usa whisper local.
 - **`whisperModel`**: `small`, `medium` (busca `ggml-<nombre>.bin` en
-  `~/Library/Application Support/Susurro/models/`) o una ruta absoluta a cualquier modelo ggml.
+  `~/Library/Application Support/Susurro/models/`) o una ruta absoluta a cualquier modelo ggml. Solo
+  aplica a `local`.
 - **`whisperCLI`**: ruta a `whisper-cli`.
+- **`cleanup`**: pasa el transcript por un LLM de Groq que saca muletillas ("eh", "este", "o sea"),
+  repeticiones y arranques en falso, y arregla puntuación y mayúsculas sin cambiar lo que dijiste.
+  Necesita `GROQ_API_KEY`. Si Groq no responde en 8 segundos o la respuesta no parece una versión
+  limpia del texto (por ejemplo, si el modelo contestó una pregunta en vez de transcribirla), se pega
+  el texto sin limpiar.
+- **`cleanupModel`**: modelo de Groq para la limpieza.
+
+### Keys de API
+
+Van en `~/.config/susurro/.env`, que no sale de tu máquina salvo hacia el proveedor correspondiente:
+
+```
+GROQ_API_KEY=gsk_...
+OPENAI_API_KEY=sk-...
+```
+
+Con `transcriber: local` y `cleanup: false`, Susurro no hace ninguna llamada de red. Con `cleanup`
+activado, el texto transcripto (no el audio) se manda a Groq.
 
 ## Uso
 
@@ -104,9 +131,14 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
   "Transcribiendo". Las barras rojas siguen el nivel del micrófono.
 - El ícono de la barra de menú también indica el estado: 🎙 listo, rojo grabando, onda
   transcribiendo.
+- Si el cursor está justo después de una palabra o de un punto, Susurro agrega un espacio antes del
+  texto, para que dos dictados seguidos no queden pegados. Para saberlo lee el carácter anterior con
+  Accesibilidad; en apps que no lo exponen (muchas apps Electron y web) no agrega nada.
 - El texto queda en el portapapeles después de pegarse, así que lo podés volver a pegar con ⌘V.
 
 ### Diagnóstico
 
-`build/Susurro.app/Contents/MacOS/Susurro --transcribe archivo.wav` transcribe un WAV con la misma
-configuración que la app e imprime el texto y el tiempo que tardó.
+- `build/Susurro.app/Contents/MacOS/Susurro --transcribe archivo.wav` corre el mismo proceso que la
+  app sobre un WAV: imprime el texto crudo, el limpio y cuánto tardó cada paso.
+- `build/Susurro.app/Contents/MacOS/Susurro --clean "eh bueno este nos vemos mañana"` prueba solo la
+  limpieza.

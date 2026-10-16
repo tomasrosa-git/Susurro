@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let stateItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let hotkeyItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let pipelineItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let messageItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let accessibilityItem = NSMenuItem(
         title: "⚠︎ Falta permiso de Accesibilidad…",
@@ -16,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var config = Config.defaults
     private var monitor = HotkeyMonitor(hotkey: .fn)
-    private var controller = DictationController(transcriber: LocalTranscriber(config: .defaults))
+    private var controller = DictationController(pipeline: DictationPipeline(config: .defaults, secrets: [:]))
     private var permissionTimer: Timer?
     private let pill = PillPanel()
 
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.startedAtProvider = { [unowned self] in controller.recordingStartedAt }
         controller.onStateChange = { [unowned self] in render($0) }
         controller.onError = { [unowned self] in showMessage($0) }
+        controller.onNotice = { [unowned self] in showMessage($0, beep: false) }
         reloadConfig()
         render(.idle)
 
@@ -43,11 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         stateItem.isEnabled = false
         hotkeyItem.isEnabled = false
+        pipelineItem.isEnabled = false
         messageItem.isEnabled = false
         messageItem.isHidden = true
         accessibilityItem.target = self
         accessibilityItem.isHidden = true
-        for item in [stateItem, hotkeyItem, messageItem, accessibilityItem] { menu.addItem(item) }
+        for item in [stateItem, hotkeyItem, pipelineItem, messageItem, accessibilityItem] { menu.addItem(item) }
         menu.addItem(.separator())
         menu.addItem(item("Abrir configuración…", #selector(openConfig)))
         menu.addItem(item("Recargar configuración", #selector(reloadConfigAction)))
@@ -78,10 +81,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.show(state)
     }
 
-    private func showMessage(_ text: String) {
+    private func showMessage(_ text: String, beep: Bool = true) {
         messageItem.title = text
         messageItem.isHidden = false
-        NSSound.beep()
+        if beep { NSSound.beep() }
     }
 
     private func reloadConfig() {
@@ -90,7 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             showMessage("config.json inválido: \(error.localizedDescription)")
         }
-        controller.transcriber = LocalTranscriber(config: config)
+        let pipeline = DictationPipeline(config: config, secrets: ConfigStore.secrets())
+        controller.pipeline = pipeline
+        pipelineItem.title = pipeline.summary
+        if let warning = pipeline.warnings.first { showMessage(warning, beep: false) }
         do {
             monitor.setHotkey(try Hotkey.parse(config.hotkey))
             hotkeyItem.title = "Mantené \(config.hotkey) para dictar · doble toque: manos libres"

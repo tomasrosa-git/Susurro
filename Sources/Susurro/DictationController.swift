@@ -20,21 +20,22 @@ final class DictationController {
 
     var onStateChange: (State) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
+    var onNotice: (String) -> Void = { _ in }
 
     private(set) var state: State = .idle {
         didSet { if state != oldValue { onStateChange(state) } }
     }
     private(set) var recordingStartedAt: Date?
 
-    var transcriber: LocalTranscriber
+    var pipeline: DictationPipeline
     private var gesture = DictationGesture()
     private let recorder = AudioRecorder()
     private var transcription: Task<Void, Never>?
     private var tapTimer: Timer?
     private var limitTimer: Timer?
 
-    init(transcriber: LocalTranscriber) {
-        self.transcriber = transcriber
+    init(pipeline: DictationPipeline) {
+        self.pipeline = pipeline
     }
 
     var audioLevel: Float { recorder.level }
@@ -143,18 +144,26 @@ final class DictationController {
         state = .transcribing
 
         let wav = FileManager.default.temporaryDirectory.appendingPathComponent("susurro-\(UUID().uuidString).wav")
-        let transcriber = transcriber
+        let pipeline = pipeline
         transcription = Task {
             defer { try? FileManager.default.removeItem(at: wav) }
             do {
                 try Audio.wav(samples: samples).write(to: wav)
-                let text = try await transcriber.transcribe(wav: wav)
-                // Esc can land after whisper returns but before this resumes on the main actor.
+                var text = try await pipeline.transcriber.transcribe(wav: wav)
+                if let cleaner = pipeline.cleaner, !text.isEmpty {
+                    do {
+                        text = try await cleaner.clean(text)
+                    } catch {
+                        try Task.checkCancellation()
+                        onNotice("Limpieza no disponible, pegué el texto sin limpiar. \(error.localizedDescription)")
+                    }
+                }
+                // Esc can land after the last await but before this resumes on the main actor.
                 try Task.checkCancellation()
-                if !text.isEmpty { TextInserter.insert(text) }
-            } catch is CancellationError {
+                if !text.isEmpty { TextInserter.insert(Spacing.join(text, after: CursorContext.previousCharacter())) }
             } catch {
-                onError(error.localizedDescription)
+                // Cancelled network calls surface as URLError, not CancellationError.
+                if !Task.isCancelled { onError(error.localizedDescription) }
             }
             state = .idle
             transcription = nil

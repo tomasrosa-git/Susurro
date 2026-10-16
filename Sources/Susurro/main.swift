@@ -1,7 +1,11 @@
 import AppKit
 
-if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 < CommandLine.arguments.count {
-    exit(await DebugCLI.transcribe(path: CommandLine.arguments[index + 1]))
+let arguments = CommandLine.arguments
+if arguments.count > 2, arguments[1] == "--transcribe" {
+    exit(await DebugCLI.transcribe(path: arguments[2]))
+}
+if arguments.count > 2, arguments[1] == "--clean" {
+    exit(await DebugCLI.clean(arguments[2]))
 }
 
 let app = NSApplication.shared
