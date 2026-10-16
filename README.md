@@ -21,14 +21,19 @@ curl -L -o ~/Library/Application\ Support/Susurro/models/ggml-small.bin \
 `small` (~470 MB) es el default. Para más precisión, bajá `ggml-medium.bin` (~1,5 GB) y poné
 `"whisperModel": "medium"` en la configuración.
 
-## Compilar y ejecutar
+## Instalar
 
 ```bash
-scripts/build-app.sh
-open build/Susurro.app
+scripts/install.sh
 ```
 
-Para correr los tests: `scripts/test.sh`.
+Compila, instala en `~/Applications/Susurro.app` (aparece en Launchpad y Spotlight) y la abre. Si
+ya estaba abierta, la reemplaza. Susurro no se abre sola al iniciar sesión; si querés que lo haga,
+agregala en **Ajustes del Sistema → General → Ítems de inicio**.
+
+Para desarrollo: `scripts/build-app.sh` deja la app en `build/Susurro.app` sin instalarla y
+`scripts/test.sh` corre los tests. El ícono se genera con `scripts/make-icon.sh` a partir de
+`scripts/make-icon.swift`.
 
 ## Permisos
 
@@ -75,6 +80,7 @@ Accesibilidad. Para evitarlo, creá una identidad de firma propia una sola vez:
   "cleanupModel" : "qwen/qwen3.8-27b",
   "hotkey" : "fn",
   "language" : "auto",
+  "restoreClipboard" : false,
   "transcriber" : "local",
   "whisperCLI" : "/opt/homebrew/bin/whisper-cli",
   "whisperModel" : "small"
@@ -102,6 +108,10 @@ Si actualizás Susurro y aparecen opciones nuevas, se agregan solas al archivo c
   limpia del texto (por ejemplo, si el modelo contestó una pregunta en vez de transcribirla), se pega
   el texto sin limpiar.
 - **`cleanupModel`**: modelo de Groq para la limpieza.
+- **`restoreClipboard`**: con `false` (el default), el dictado queda en el portapapeles después de
+  pegarse. Con `true`, Susurro vuelve a poner lo que tenías copiado medio segundo después de pegar,
+  y marca el dictado como transitorio para que los gestores de portapapeles no lo guarden. Si en
+  ese medio segundo copiás otra cosa, no la pisa.
 
 ### Keys de API
 
@@ -129,8 +139,10 @@ activado, el texto transcripto (no el audio) se manda a Groq.
 - Mientras graba o transcribe aparece una pill flotante abajo en la pantalla: "Escuchando" al
   mantener, "Manos libres" con el tiempo transcurrido (en naranja en los últimos 30 s) y
   "Transcribiendo". Las barras rojas siguen el nivel del micrófono.
-- El ícono de la barra de menú también indica el estado: 🎙 listo, rojo grabando, onda
-  transcribiendo.
+- El ícono de la barra de menú (la onda del logo) también indica el estado: normal cuando está
+  listo, rojo grabando, atenuado transcribiendo y gris si está desactivado.
+- **Activado** en el menú prende o apaga Susurro sin cerrarlo; mientras está apagado, el atajo
+  no hace nada. El estado se recuerda entre aperturas.
 - Si el cursor está justo después de una palabra o de un punto, Susurro agrega un espacio antes del
   texto, para que dos dictados seguidos no queden pegados. Para saberlo lee el carácter anterior con
   Accesibilidad; en apps que no lo exponen (muchas apps Electron y web) no agrega nada.

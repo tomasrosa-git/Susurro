@@ -28,6 +28,7 @@ final class DictationController {
     private(set) var recordingStartedAt: Date?
 
     var pipeline: DictationPipeline
+    var restoreClipboard = false
     private var gesture = DictationGesture()
     private let recorder = AudioRecorder()
     private var transcription: Task<Void, Never>?
@@ -145,6 +146,7 @@ final class DictationController {
 
         let wav = FileManager.default.temporaryDirectory.appendingPathComponent("susurro-\(UUID().uuidString).wav")
         let pipeline = pipeline
+        let restoreClipboard = restoreClipboard
         transcription = Task {
             defer { try? FileManager.default.removeItem(at: wav) }
             do {
@@ -160,7 +162,12 @@ final class DictationController {
                 }
                 // Esc can land after the last await but before this resumes on the main actor.
                 try Task.checkCancellation()
-                if !text.isEmpty { TextInserter.insert(Spacing.join(text, after: CursorContext.previousCharacter())) }
+                if !text.isEmpty {
+                    TextInserter.insert(
+                        Spacing.join(text, after: CursorContext.previousCharacter()),
+                        restoringClipboard: restoreClipboard
+                    )
+                }
             } catch {
                 // Cancelled network calls surface as URLError, not CancellationError.
                 if !Task.isCancelled { onError(error.localizedDescription) }

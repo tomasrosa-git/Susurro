@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pipelineItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let messageItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let enabledItem = NSMenuItem(title: "Activado", action: #selector(toggleEnabled), keyEquivalent: "")
     private let accessibilityItem = NSMenuItem(
         title: "⚠︎ Falta permiso de Accesibilidad…",
         action: #selector(openAccessibilitySettings),
@@ -21,9 +22,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionTimer: Timer?
     private let pill = PillPanel()
 
+    private static let enabledKey = "enabled"
+    private var enabled = UserDefaults.standard.object(forKey: AppDelegate.enabledKey) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(enabled, forKey: Self.enabledKey)
+            if !enabled { controller.escapePressed() }
+            render(controller.state)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
-        monitor.onPress = { [unowned self] in controller.hotkeyPressed() }
+        monitor.onPress = { [unowned self] in if enabled { controller.hotkeyPressed() } }
         monitor.onRelease = { [unowned self] in controller.hotkeyReleased() }
         monitor.onOtherKey = { [unowned self] in controller.otherKeyPressed() }
         monitor.onEscape = { [unowned self] in controller.escapePressed() }
@@ -52,6 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityItem.isHidden = true
         for item in [stateItem, hotkeyItem, pipelineItem, messageItem, accessibilityItem] { menu.addItem(item) }
         menu.addItem(.separator())
+        enabledItem.target = self
+        menu.addItem(enabledItem)
+        menu.addItem(.separator())
         menu.addItem(item("Abrir configuración…", #selector(openConfig)))
         menu.addItem(item("Recargar configuración", #selector(reloadConfigAction)))
         menu.addItem(.separator())
@@ -66,17 +79,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func render(_ state: DictationController.State) {
-        let (symbol, title, tint): (String, String, NSColor?) = switch state {
-        case .idle: ("mic", "Listo", nil)
-        case .recording(.hold): ("mic.fill", "Grabando…", .systemRed)
-        case .recording(.handsFree): ("mic.fill", "Grabando (manos libres)…", .systemRed)
-        case .transcribing: ("waveform", "Transcribiendo…", nil)
+        let title: String = switch state {
+        case .idle: enabled ? "Listo" : "Desactivado"
+        case .recording(.hold): "Grabando…"
+        case .recording(.handsFree): "Grabando (manos libres)…"
+        case .transcribing: "Transcribiendo…"
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Susurro: \(title)")
-        image?.isTemplate = true
-        statusItem.button?.image = image
-        statusItem.button?.contentTintColor = tint
+        if let button = statusItem.button {
+            button.image = MenuBarIcon.wave
+            button.contentTintColor = if case .recording = state { .systemRed } else { nil }
+            button.alphaValue = state == .transcribing ? 0.55 : 1
+            button.appearsDisabled = !enabled
+            button.toolTip = "Susurro — \(title)"
+        }
         stateItem.title = "Susurro — \(title)"
+        enabledItem.state = enabled ? .on : .off
         if case .recording = state { messageItem.isHidden = true }
         pill.show(state)
     }
@@ -95,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let pipeline = DictationPipeline(config: config, secrets: ConfigStore.secrets())
         controller.pipeline = pipeline
+        controller.restoreClipboard = config.restoreClipboard
         pipelineItem.title = pipeline.summary
         if let warning = pipeline.warnings.first { showMessage(warning, beep: false) }
         do {
@@ -130,6 +148,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         process.arguments = ["-t", Paths.configFile.path]
         try? process.run()
+    }
+
+    @objc private func toggleEnabled() {
+        enabled.toggle()
     }
 
     @objc private func reloadConfigAction() {
