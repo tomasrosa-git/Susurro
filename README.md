@@ -1,14 +1,82 @@
-# Susurro
+<p align="center"><img src="docs/icon.png" width="96" alt="Ícono de Susurro"></p>
 
-Dictado por voz para todo macOS. Mantené apretada una tecla, hablá, soltá: el texto aparece donde
-esté el cursor, en cualquier app. Corre en la barra de menú, transcribe localmente con
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) y funciona sin conexión. Opcionalmente pasa
-el texto por un LLM que saca muletillas y arregla la puntuación. Sin cuentas ni telemetría.
+<h1 align="center">Susurro</h1>
+
+<p align="center">
+  Dictado por voz para todo macOS: mantené una tecla, hablá, soltá, y el texto aparece donde está el cursor.
+  <br><br>
+  <a href="https://github.com/tomasrosa-git/Susurro/actions/workflows/tests.yml"><img src="https://github.com/tomasrosa-git/Susurro/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/tomasrosa-git/Susurro/releases/latest"><img src="https://img.shields.io/github/v/release/tomasrosa-git/Susurro?label=descargar" alt="Descargar"></a>
+</p>
+
+Corre en la barra de menú y funciona en cualquier app: Notas, Mail, Slack, el navegador, la terminal.
+Transcribe localmente con [whisper.cpp](https://github.com/ggml-org/whisper.cpp), así que funciona
+sin conexión, y opcionalmente pasa el texto por un LLM que saca muletillas y arregla la puntuación.
+Sin cuentas ni telemetría.
+
+## Qué hace
+
+- **Mantener para hablar** con `fn` (o la combinación que elijas), o **manos libres** con doble toque.
+- **Limpieza con IA**: "eh bueno este, mañana a las tres, no, a las cuatro" se pega como "Mañana a
+  las cuatro." Respeta el voseo y no responde preguntas: las transcribe.
+- **Modo comando** (`fn` + `ctrl`): con texto seleccionado lo transforma ("hacelo más formal",
+  "traducilo al inglés"); sin selección escribe lo que pedís ("escribí un mail diciendo que llego
+  tarde").
+- **Diccionario personal** para nombres propios y términos técnicos, con reemplazos para los errores
+  que Whisper repite.
+- **Historial** de los últimos dictados, solo en memoria.
+- Transcripción en la nube opcional (Groq u OpenAI), Esc para cancelar y una pill flotante que muestra
+  el nivel del micrófono.
+
+## Cómo está hecho
+
+- **Swift nativo con SwiftPM y AppKit**, sin Xcode: compila con las Command Line Tools. Un ejecutable
+  de barra de menú (`LSUIElement`) de 1 MB, ícono incluido.
+- **Atajo global con un event tap** de Core Graphics. `fn` no es una tecla común: llega como cambio
+  de modificadores, así que se distingue de `fn`+flecha y de `fn`+`ctrl` a mano.
+- **Grabación con AVAudioEngine** a 16 kHz mono, el formato que espera Whisper.
+- **whisper.cpp como proceso aparte** (`whisper-cli`) por cada dictado: ~0,5 s con el modelo `small`
+  en Apple Silicon, sin dejar un modelo de 500 MB cargado en memoria todo el día.
+- **Pegado con el portapapeles y ⌘V simulado**, que funciona en todas las apps, a diferencia de tipear
+  carácter por carácter. La selección y el carácter anterior al cursor se leen con Accesibilidad.
+- **LLM vía Groq** (Qwen sin razonamiento, ~0,35 s). La salida se valida antes de pegarla: si el
+  modelo contestó en vez de limpiar, se pega el texto original.
+- **La lógica sin UI vive en `SusurroCore`** y tiene tests con swift-testing que corren en CI: parseo
+  de atajos, gestos de mantener/doble toque, reemplazos del diccionario, validación de las respuestas
+  del LLM.
+
+## Instalar
+
+### Descargando la app
+
+1. Instalá whisper.cpp y bajá un modelo (ver [Requisitos](#requisitos)).
+2. Bajá el `.dmg` de la [última versión](https://github.com/tomasrosa-git/Susurro/releases/latest) y
+   arrastrá Susurro a Aplicaciones.
+3. La app no está notarizada por Apple, así que la primera vez macOS no la deja abrir. Andá a
+   **Ajustes del Sistema → Privacidad y seguridad**, bajá hasta el aviso sobre Susurro y tocá
+   **Abrir igualmente**.
+
+Necesita una Mac con Apple Silicon.
+
+### Compilando
+
+```bash
+scripts/install.sh
+```
+
+Compila, instala en `~/Applications/Susurro.app` (aparece en Launchpad y Spotlight) y la abre. Si
+ya estaba abierta, la reemplaza. Susurro no se abre sola al iniciar sesión; si querés que lo haga,
+agregala en **Ajustes del Sistema → General → Ítems de inicio**.
+
+Para desarrollo: `scripts/build-app.sh` deja la app en `build/Susurro.app` sin instalarla,
+`scripts/test.sh` corre los tests y `scripts/release.sh` arma `build/Susurro-<versión>.dmg` con la
+versión de `Resources/Info.plist`. El ícono se genera con `scripts/make-icon.sh` a partir de
+`scripts/make-icon.swift`.
 
 ## Requisitos
 
-- macOS 14 o posterior, Apple Silicon recomendado (whisper.cpp usa Metal).
-- Xcode o Command Line Tools (`xcode-select --install`).
+- macOS 14 o posterior en Apple Silicon (whisper.cpp usa Metal).
+- Para compilar: Xcode o Command Line Tools (`xcode-select --install`).
 - whisper.cpp y un modelo:
 
 ```bash
@@ -20,20 +88,6 @@ curl -L -o ~/Library/Application\ Support/Susurro/models/ggml-small.bin \
 
 `small` (~470 MB) es el default. Para más precisión, bajá `ggml-medium.bin` (~1,5 GB) y poné
 `"whisperModel": "medium"` en la configuración.
-
-## Instalar
-
-```bash
-scripts/install.sh
-```
-
-Compila, instala en `~/Applications/Susurro.app` (aparece en Launchpad y Spotlight) y la abre. Si
-ya estaba abierta, la reemplaza. Susurro no se abre sola al iniciar sesión; si querés que lo haga,
-agregala en **Ajustes del Sistema → General → Ítems de inicio**.
-
-Para desarrollo: `scripts/build-app.sh` deja la app en `build/Susurro.app` sin instalarla y
-`scripts/test.sh` corre los tests. El ícono se genera con `scripts/make-icon.sh` a partir de
-`scripts/make-icon.swift`.
 
 ## Permisos
 
