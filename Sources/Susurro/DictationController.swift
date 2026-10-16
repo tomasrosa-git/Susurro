@@ -10,8 +10,8 @@ final class DictationController {
 
     enum State: Equatable {
         case idle
-        case recording(Mode)
-        case transcribing
+        case recording(Mode, Trigger)
+        case transcribing(Trigger)
     }
 
     /// A forgotten hands-free session must not record all afternoon.
@@ -35,6 +35,7 @@ final class DictationController {
     private var transcription: Task<Void, Never>?
     private var tapTimer: Timer?
     private var limitTimer: Timer?
+    private var pendingTrigger: Trigger = .dictation
 
     init(pipeline: DictationPipeline) {
         self.pipeline = pipeline
@@ -42,9 +43,17 @@ final class DictationController {
 
     var audioLevel: Float { recorder.level }
 
-    func hotkeyPressed() {
-        guard state != .transcribing else { return }
-        apply(gesture.press(at: now))
+    func hotkeyPressed(_ trigger: Trigger) {
+        if case .transcribing = state { return }
+        let action = gesture.press(at: now)
+        pendingTrigger = trigger
+        if trigger == .command { upgradeToCommand() }
+        apply(action)
+    }
+
+    /// Joining the command modifiers mid-recording turns the take into a command, without losing audio.
+    func upgradeToCommand() {
+        if case .recording(let mode, .dictation) = state { state = .recording(mode, .command) }
     }
 
     func hotkeyReleased() {
@@ -73,7 +82,7 @@ final class DictationController {
         switch action {
         case .none: break
         case .start: startRecording()
-        case .handsFree: if case .recording = state { state = .recording(.handsFree) }
+        case .handsFree: if case .recording(_, let trigger) = state { state = .recording(.handsFree, trigger) }
         case .finish: finishRecording()
         case .cancel: cancelRecording()
         }
@@ -113,7 +122,7 @@ final class DictationController {
             return
         }
         recordingStartedAt = Date()
-        state = .recording(.hold)
+        state = .recording(.hold, pendingTrigger)
         limitTimer = Timer.scheduledTimer(withTimeInterval: Self.maxRecordingDuration, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -137,13 +146,13 @@ final class DictationController {
     }
 
     private func finishRecording() {
-        guard case .recording = state else { return }
+        guard case .recording(_, let trigger) = state else { return }
         let samples = stopRecorder()
         guard samples.count >= Int(Self.minimumDuration * Double(Audio.sampleRate)), !Audio.isSilent(samples) else {
             state = .idle
             return
         }
-        state = .transcribing
+        state = .transcribing(trigger)
 
         let wav = FileManager.default.temporaryDirectory.appendingPathComponent("susurro-\(UUID().uuidString).wav")
         let pipeline = pipeline
@@ -152,6 +161,12 @@ final class DictationController {
             defer { try? FileManager.default.removeItem(at: wav) }
             do {
                 try Audio.wav(samples: samples).write(to: wav)
+                if trigger == .command {
+                    try await runCommand(wav: wav, pipeline: pipeline, restoreClipboard: restoreClipboard)
+                    state = .idle
+                    transcription = nil
+                    return
+                }
                 var text = try await pipeline.transcript(wav: wav)
                 if let cleaner = pipeline.cleaner, !text.isEmpty {
                     do {
@@ -177,5 +192,22 @@ final class DictationController {
             state = .idle
             transcription = nil
         }
+    }
+
+    private func runCommand(wav: URL, pipeline: DictationPipeline, restoreClipboard: Bool) async throws {
+        guard let commander = pipeline.commander else {
+            onError("El modo comando necesita GROQ_API_KEY en .env.")
+            return
+        }
+        // Read before the transcription await: by then the user may have clicked elsewhere.
+        let selection = await CursorContext.selectedText()
+        let instruction = try await pipeline.transcript(wav: wav)
+        guard !instruction.isEmpty else { return }
+        let output = try await commander.run(instruction: instruction, selection: selection)
+        try Task.checkCancellation()
+        // With a selection, ⌘V replaces it; without one it's new text at the cursor, spaced like a dictation.
+        let text = selection == nil ? Spacing.join(output, after: CursorContext.previousCharacter()) : output
+        TextInserter.insert(text, restoringClipboard: restoreClipboard)
+        onDictation(output)
     }
 }

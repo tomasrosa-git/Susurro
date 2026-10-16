@@ -11,7 +11,8 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
 }
 
 public enum Hotkey: Equatable, Sendable {
-    case fn
+    /// fn / 🌐, optionally held together with modifiers ("fn+ctrl").
+    case fn(Modifiers)
     case combo(keyCode: UInt16, modifiers: Modifiers)
 
     public enum ParseError: Error, Equatable {
@@ -20,6 +21,7 @@ public enum Hotkey: Equatable, Sendable {
         case missingKey
         case multipleKeys
         case needsModifier(String)
+        case fnWithKey(String)
     }
 
     public static func parse(_ spec: String) throws -> Hotkey {
@@ -28,12 +30,14 @@ public enum Hotkey: Equatable, Sendable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !tokens.isEmpty else { throw ParseError.empty }
-        if tokens == ["fn"] || tokens == ["globe"] { return .fn }
 
         var modifiers: Modifiers = []
         var key: (name: String, code: UInt16)?
+        var fn = false
         for token in tokens {
-            if let modifier = modifierNames[token] {
+            if token == "fn" || token == "globe" {
+                fn = true
+            } else if let modifier = modifierNames[token] {
                 modifiers.insert(modifier)
             } else if let code = keyCodes[token] {
                 guard key == nil else { throw ParseError.multipleKeys }
@@ -41,6 +45,10 @@ public enum Hotkey: Equatable, Sendable {
             } else {
                 throw ParseError.unknownToken(token)
             }
+        }
+        if fn {
+            if let key { throw ParseError.fnWithKey(key.name) }
+            return .fn(modifiers)
         }
         guard let key else { throw ParseError.missingKey }
         // A bare letter or space would be swallowed from normal typing.
@@ -70,4 +78,37 @@ public enum Hotkey: Equatable, Sendable {
         "f9": 101, "f10": 109, "f11": 103, "f12": 111, "f13": 105, "f14": 107, "f15": 113,
         "f16": 106, "f17": 64, "f18": 79, "f19": 80,
     ]
+}
+
+public enum Trigger: Equatable, Sendable {
+    case dictation
+    case command
+}
+
+/// Which of the two configured hotkeys a key event belongs to. The command hotkey is checked first because the
+/// default pair shares fn: "fn+ctrl" is a command, plain fn (with or without other modifiers) is dictation.
+public struct HotkeyBindings: Equatable, Sendable {
+    public let dictation: Hotkey
+    public let command: Hotkey?
+
+    public init(dictation: Hotkey, command: Hotkey?) {
+        self.dictation = dictation
+        self.command = command == dictation ? nil : command
+    }
+
+    public var usesFn: Bool {
+        [dictation, command].contains { if case .fn = $0 { true } else { false } }
+    }
+
+    public func fnTrigger(modifiers: Modifiers) -> Trigger? {
+        if case .fn(let required) = command, modifiers.isSuperset(of: required) { return .command }
+        if case .fn(let required) = dictation, modifiers.isSuperset(of: required) { return .dictation }
+        return nil
+    }
+
+    public func comboTrigger(keyCode: UInt16, modifiers: Modifiers) -> Trigger? {
+        if command == .combo(keyCode: keyCode, modifiers: modifiers) { return .command }
+        if dictation == .combo(keyCode: keyCode, modifiers: modifiers) { return .dictation }
+        return nil
+    }
 }

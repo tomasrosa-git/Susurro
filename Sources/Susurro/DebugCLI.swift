@@ -2,7 +2,8 @@ import Foundation
 import SusurroCore
 
 /// `Susurro --transcribe file.wav` runs the same pipeline as the app (transcription + cleanup) without hotkeys
-/// or paste. `Susurro --clean "text"` runs only the cleanup.
+/// or paste. `Susurro --clean "text"` runs only the cleanup; `Susurro --command "instruction" ["selection"]` runs
+/// command mode.
 enum DebugCLI {
     static func transcribe(path: String) async -> Int32 {
         await run { pipeline in
@@ -11,6 +12,13 @@ enum DebugCLI {
             if let cleaner = pipeline.cleaner, !raw.isEmpty {
                 print(try await timed("limpieza") { try await cleaner.clean(raw) })
             }
+        }
+    }
+
+    static func command(_ instruction: String, selection: String?) async -> Int32 {
+        await run { pipeline in
+            guard let commander = pipeline.commander else { throw CLIError("Falta GROQ_API_KEY.") }
+            print(try await timed("comando") { try await commander.run(instruction: instruction, selection: selection) })
         }
     }
 

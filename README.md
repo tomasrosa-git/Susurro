@@ -83,6 +83,7 @@ vez; de ahí en adelante se mantiene.
 {
   "cleanup" : true,
   "cleanupModel" : "qwen/qwen3.8-27b",
+  "commandHotkey" : "fn+ctrl",
   "hotkey" : "fn",
   "language" : "auto",
   "restoreClipboard" : false,
@@ -98,6 +99,9 @@ Si actualizás Susurro y aparecen opciones nuevas, se agregan solas al archivo c
   `ctrl`, `option`/`alt`, `shift`, `cmd`. Teclas: letras, números, `space`, `return`, `tab`,
   `delete`, `f1`–`f19`. Salvo `f13`–`f19`, una combinación necesita al menos un modificador. La
   combinación queda reservada para Susurro: no le llega a la app activa.
+- **`commandHotkey`**: atajo del modo comando (ver Uso). `fn+ctrl` por defecto; acepta `fn` con
+  modificadores (`fn+option`) o una combinación como las de `hotkey`. Si es inválido o igual a
+  `hotkey`, el modo comando queda desactivado.
 - **`language`**: `auto` para detectar el idioma, o un código como `es` o `en`. Fijarlo mejora la
   precisión en frases cortas.
 - **`transcriber`**: `local` (whisper.cpp, sin conexión), `groq` (`whisper-large-v3-turbo`) u `openai`
@@ -112,7 +116,7 @@ Si actualizás Susurro y aparecen opciones nuevas, se agregan solas al archivo c
   Necesita `GROQ_API_KEY`. Si Groq no responde en 8 segundos o la respuesta no parece una versión
   limpia del texto (por ejemplo, si el modelo contestó una pregunta en vez de transcribirla), se pega
   el texto sin limpiar.
-- **`cleanupModel`**: modelo de Groq para la limpieza.
+- **`cleanupModel`**: modelo de Groq para la limpieza y el modo comando.
 - **`restoreClipboard`**: con `false` (el default), el dictado queda en el portapapeles después de
   pegarse. Con `true`, Susurro vuelve a poner lo que tenías copiado medio segundo después de pegar,
   y marca el dictado como transitorio para que los gestores de portapapeles no lo guarden. Si en
@@ -151,7 +155,8 @@ GROQ_API_KEY=gsk_...
 OPENAI_API_KEY=sk-...
 ```
 
-Con `transcriber: local` y `cleanup: false`, Susurro no hace ninguna llamada de red. Con `cleanup`
+Con `transcriber: local` y `cleanup: false`, Susurro no hace ninguna llamada de red salvo en el modo
+comando. Con `cleanup`
 activado, el texto transcripto (no el audio) se manda a Groq.
 
 ## Uso
@@ -167,7 +172,8 @@ activado, el texto transcripto (no el audio) se manda a Groq.
   descarta: la estabas usando como modificador.
 - Mientras graba o transcribe aparece una pill flotante abajo en la pantalla: "Escuchando" al
   mantener, "Manos libres" con el tiempo transcurrido (en naranja en los últimos 30 s) y
-  "Transcribiendo". Las barras rojas siguen el nivel del micrófono.
+  "Transcribiendo". Las barras rojas siguen el nivel del micrófono. En modo comando las barras son
+  violetas y dice "Comando" y después "Aplicando".
 - El ícono de la barra de menú (la onda del logo) también indica el estado: normal cuando está
   listo, rojo grabando, atenuado transcribiendo y gris si está desactivado.
 - **Activado** en el menú prende o apaga Susurro sin cerrarlo; mientras está apagado, el atajo
@@ -176,6 +182,16 @@ activado, el texto transcripto (no el audio) se manda a Groq.
   texto, para que dos dictados seguidos no queden pegados. Para saberlo lee el carácter anterior con
   Accesibilidad; en apps que no lo exponen (muchas apps Electron y web) no agrega nada.
 - El texto queda en el portapapeles después de pegarse, así que lo podés volver a pegar con ⌘V.
+- **Modo comando**: mantené **fn + ctrl** y decí qué hacer.
+  - Con texto seleccionado, lo transforma y lo reemplaza: "hacelo más formal", "traducilo al
+    inglés", "pasalo a una lista", "corregí la ortografía". ⌘Z lo deshace.
+  - Sin selección, escribe texto nuevo donde está el cursor: "escribí un mail a Laura diciendo que
+    llego tarde el jueves", "respondele que sí, que el viernes puedo".
+  - Si empezaste a dictar con fn solo, apretar ctrl sin soltar fn lo convierte en comando. Doble toque
+    de fn + ctrl activa manos libres también acá.
+  - La selección se lee con Accesibilidad; en apps que no la exponen, Susurro hace ⌘C y después
+    vuelve a dejar tu portapapeles como estaba. Máximo 2500 caracteres seleccionados.
+  - Necesita `GROQ_API_KEY`: la instrucción y el texto seleccionado se mandan a Groq.
 - **Historial** en el menú: los últimos 10 dictados, del más nuevo al más viejo. Un clic copia el
   texto completo al portapapeles, por ejemplo si se pegó en la ventana equivocada. Vive solo en
   memoria: se borra al cerrar Susurro y nunca se escribe a disco. "Borrar historial" lo vacía antes.
@@ -186,3 +202,5 @@ activado, el texto transcripto (no el audio) se manda a Groq.
   app sobre un WAV: imprime el texto crudo, el limpio y cuánto tardó cada paso.
 - `build/Susurro.app/Contents/MacOS/Susurro --clean "eh bueno este nos vemos mañana"` prueba solo la
   limpieza.
+- `build/Susurro.app/Contents/MacOS/Susurro --command "traducilo al inglés" "texto seleccionado"` prueba el
+  modo comando; sin el segundo argumento, como si no hubiera selección.

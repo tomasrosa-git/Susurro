@@ -87,7 +87,7 @@ public enum Cleanup {
         options: [.caseInsensitive]
     )
 
-    private static func dropPreamble(_ text: String) -> String {
+    static func dropPreamble(_ text: String) -> String {
         let range = NSRange(text.startIndex..., in: text)
         guard let match = preamble.firstMatch(in: text, range: range), let swiftRange = Range(match.range, in: text)
         else { return text }
@@ -96,7 +96,7 @@ public enum Cleanup {
 
     private static let quotePairs: [(Character, Character)] = [("\"", "\""), ("“", "”"), ("«", "»")]
 
-    private static func dropWrappingQuotes(_ text: String, raw: String) -> String {
+    static func dropWrappingQuotes(_ text: String, raw: String) -> String {
         guard text.count >= 2, let first = text.first, let last = text.last else { return text }
         let rawTrimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         for (open, close) in quotePairs where first == open && last == close {
