@@ -1,0 +1,15 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      # Plain `swift test`: the runner has Xcode, so scripts/test.sh's Command Line Tools workaround isn't needed.
+      - run: swift test
