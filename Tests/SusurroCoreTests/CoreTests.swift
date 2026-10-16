@@ -11,8 +11,22 @@ import Testing
     }
 
     @Test func roundTrips() throws {
-        let config = Config(hotkey: "f13", language: "es", whisperModel: "medium", whisperCLI: "/x/whisper-cli")
+        let config = Config(
+            hotkey: "f13", language: "es", transcriber: .groq, whisperModel: "medium",
+            whisperCLI: "/x/whisper-cli", cleanup: false, cleanupModel: "m"
+        )
         #expect(try Config.decode(config.encoded()) == config)
+    }
+
+    @Test func phaseOneConfigGetsNewDefaults() throws {
+        let config = try Config.decode(Data(#"{"hotkey": "fn", "language": "es", "whisperModel": "small"}"#.utf8))
+        #expect(config.transcriber == .local)
+        #expect(config.cleanup)
+        #expect(config.cleanupModel == Config.defaults.cleanupModel)
+    }
+
+    @Test func unknownTranscriberIsAnError() {
+        #expect(throws: DecodingError.self) { try Config.decode(Data(#"{"transcriber": "azure"}"#.utf8)) }
     }
 
     @Test func modelNameResolvesInsideModelsDir() {
