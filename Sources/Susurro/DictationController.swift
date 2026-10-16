@@ -3,47 +3,89 @@ import SusurroCore
 
 @MainActor
 final class DictationController {
-    enum State {
+    enum Mode: Equatable {
+        case hold
+        case handsFree
+    }
+
+    enum State: Equatable {
         case idle
-        case recording
+        case recording(Mode)
         case transcribing
     }
+
+    /// A forgotten hands-free session must not record all afternoon.
+    static let maxRecordingDuration: TimeInterval = 5 * 60
+    private static let minimumDuration: TimeInterval = 0.3
 
     var onStateChange: (State) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
 
     private(set) var state: State = .idle {
-        didSet { onStateChange(state) }
+        didSet { if state != oldValue { onStateChange(state) } }
     }
+    private(set) var recordingStartedAt: Date?
 
     var transcriber: LocalTranscriber
-    private var gesture = HoldGesture()
+    private var gesture = DictationGesture()
     private let recorder = AudioRecorder()
     private var transcription: Task<Void, Never>?
+    private var tapTimer: Timer?
+    private var limitTimer: Timer?
 
     init(transcriber: LocalTranscriber) {
         self.transcriber = transcriber
     }
 
+    var audioLevel: Float { recorder.level }
+
     func hotkeyPressed() {
-        guard state == .idle, gesture.press(at: ProcessInfo.processInfo.systemUptime) == .start else { return }
-        startRecording()
+        guard state != .transcribing else { return }
+        apply(gesture.press(at: now))
     }
 
     func hotkeyReleased() {
-        apply(gesture.release(at: ProcessInfo.processInfo.systemUptime))
+        apply(gesture.release(at: now))
     }
 
     func otherKeyPressed() {
         apply(gesture.otherKeyPressed())
     }
 
-    private func apply(_ action: HoldGesture.Action) {
-        guard state == .recording else { return }
+    func escapePressed() {
+        switch state {
+        case .idle:
+            break
+        case .recording:
+            gesture.reset()
+            cancelRecording()
+        case .transcribing:
+            transcription?.cancel()
+        }
+    }
+
+    private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    private func apply(_ action: DictationGesture.Action) {
         switch action {
+        case .none: break
+        case .start: startRecording()
+        case .handsFree: if case .recording = state { state = .recording(.handsFree) }
         case .finish: finishRecording()
         case .cancel: cancelRecording()
-        case .start, .none: break
+        }
+        scheduleTapTimer()
+    }
+
+    private func scheduleTapTimer() {
+        tapTimer?.invalidate()
+        tapTimer = nil
+        guard let deadline = gesture.deadline else { return }
+        tapTimer = Timer.scheduledTimer(withTimeInterval: max(0, deadline - now), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.apply(self.gesture.tapWindowElapsed())
+            }
         }
     }
 
@@ -52,29 +94,49 @@ final class DictationController {
         case .authorized:
             break
         case .notDetermined:
+            gesture.reset()
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
             return
         default:
+            gesture.reset()
             onError("Susurro no tiene permiso para usar el micrófono.")
             return
         }
         do {
             try recorder.start()
-            state = .recording
         } catch {
+            gesture.reset()
             onError(error.localizedDescription)
+            return
+        }
+        recordingStartedAt = Date()
+        state = .recording(.hold)
+        limitTimer = Timer.scheduledTimer(withTimeInterval: Self.maxRecordingDuration, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.gesture.reset()
+                self.finishRecording()
+            }
         }
     }
 
+    private func stopRecorder() -> [Float] {
+        limitTimer?.invalidate()
+        limitTimer = nil
+        recordingStartedAt = nil
+        return recorder.stop()
+    }
+
     private func cancelRecording() {
-        _ = recorder.stop()
+        guard case .recording = state else { return }
+        _ = stopRecorder()
         state = .idle
     }
 
     private func finishRecording() {
-        let samples = recorder.stop()
-        let minimumSamples = Int(gesture.minimumHold * Double(Audio.sampleRate))
-        guard samples.count >= minimumSamples, !Audio.isSilent(samples) else {
+        guard case .recording = state else { return }
+        let samples = stopRecorder()
+        guard samples.count >= Int(Self.minimumDuration * Double(Audio.sampleRate)), !Audio.isSilent(samples) else {
             state = .idle
             return
         }
@@ -87,6 +149,8 @@ final class DictationController {
             do {
                 try Audio.wav(samples: samples).write(to: wav)
                 let text = try await transcriber.transcribe(wav: wav)
+                // Esc can land after whisper returns but before this resumes on the main actor.
+                try Task.checkCancellation()
                 if !text.isEmpty { TextInserter.insert(text) }
             } catch is CancellationError {
             } catch {

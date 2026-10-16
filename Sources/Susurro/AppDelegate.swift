@@ -18,12 +18,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor = HotkeyMonitor(hotkey: .fn)
     private var controller = DictationController(transcriber: LocalTranscriber(config: .defaults))
     private var permissionTimer: Timer?
+    private let pill = PillPanel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         monitor.onPress = { [unowned self] in controller.hotkeyPressed() }
         monitor.onRelease = { [unowned self] in controller.hotkeyReleased() }
         monitor.onOtherKey = { [unowned self] in controller.otherKeyPressed() }
+        monitor.onEscape = { [unowned self] in controller.escapePressed() }
+        pill.levelProvider = { [unowned self] in controller.audioLevel }
+        pill.startedAtProvider = { [unowned self] in controller.recordingStartedAt }
         controller.onStateChange = { [unowned self] in render($0) }
         controller.onError = { [unowned self] in showMessage($0) }
         reloadConfig()
@@ -61,7 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render(_ state: DictationController.State) {
         let (symbol, title, tint): (String, String, NSColor?) = switch state {
         case .idle: ("mic", "Listo", nil)
-        case .recording: ("mic.fill", "Grabando…", .systemRed)
+        case .recording(.hold): ("mic.fill", "Grabando…", .systemRed)
+        case .recording(.handsFree): ("mic.fill", "Grabando (manos libres)…", .systemRed)
         case .transcribing: ("waveform", "Transcribiendo…", nil)
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Susurro: \(title)")
@@ -69,7 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = image
         statusItem.button?.contentTintColor = tint
         stateItem.title = "Susurro — \(title)"
-        if state == .recording { messageItem.isHidden = true }
+        if case .recording = state { messageItem.isHidden = true }
+        pill.show(state)
     }
 
     private func showMessage(_ text: String) {
@@ -87,10 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.transcriber = LocalTranscriber(config: config)
         do {
             monitor.setHotkey(try Hotkey.parse(config.hotkey))
-            hotkeyItem.title = "Mantené \(config.hotkey) para dictar"
+            hotkeyItem.title = "Mantené \(config.hotkey) para dictar · doble toque: manos libres"
         } catch {
             monitor.setHotkey(.fn)
-            hotkeyItem.title = "Mantené fn para dictar"
+            hotkeyItem.title = "Mantené fn para dictar · doble toque: manos libres"
             showMessage("Atajo inválido \"\(config.hotkey)\", uso fn.")
         }
     }
